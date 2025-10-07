@@ -1,5 +1,5 @@
 // Sistema de dados para o site de nutrição
-// Versão com API para produção
+// Versão com fallback robusto para evitar erros de fetch
 
 export interface Lead {
   id: string
@@ -47,38 +47,63 @@ let cache = {
   initialized: false
 }
 
-// Função para fazer requisições à API
-async function apiRequest(method: 'GET' | 'POST', data?: any) {
-  try {
-    const options: RequestInit = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+// Função para fazer requisições à API com timeout e retry
+async function apiRequest(method: 'GET' | 'POST', data?: any, retries = 2): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 segundos timeout
+
+      const options: RequestInit = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      }
+
+      if (method === 'POST' && data) {
+        options.body = JSON.stringify(data)
+      }
+
+      const response = await fetch('/api/data', options)
+      clearTimeout(timeoutId)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || 'Erro na API')
+      }
+
+      return result.data
+    } catch (error) {
+      console.warn(`Tentativa ${attempt + 1} falhou:`, error)
+      
+      if (attempt === retries) {
+        console.error('Todas as tentativas falharam, usando fallback')
+        return getFallbackData()
+      }
+      
+      // Aguardar antes de tentar novamente
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
     }
-
-    if (method === 'POST' && data) {
-      options.body = JSON.stringify(data)
-    }
-
-    const response = await fetch('/api/data', options)
-    const result = await response.json()
-
-    if (!result.success) {
-      throw new Error(result.error || 'Erro na API')
-    }
-
-    return result.data
-  } catch (error) {
-    console.error('Erro na API:', error)
-    // Fallback para localStorage em caso de erro
-    return getFallbackData()
   }
 }
 
 // Fallback para localStorage
 function getFallbackData() {
-  if (typeof window === 'undefined') return null
+  if (typeof window === 'undefined') {
+    return {
+      leads: [],
+      depoimentos: getDepoimentosPadrao(),
+      config: getConfigPadrao(),
+      lastUpdate: new Date().toISOString()
+    }
+  }
 
   try {
     const leads = localStorage.getItem('nutri-leads')
@@ -150,7 +175,7 @@ function getDepoimentosPadrao(): Depoimento[] {
   ]
 }
 
-// Inicializar cache
+// Inicializar cache de forma segura
 async function initializeCache() {
   if (cache.initialized) return
 
@@ -201,59 +226,71 @@ export function carregarLeadsSync(): Lead[] {
 
 export async function adicionarLead(lead: Omit<Lead, 'id' | 'data' | 'status'>): Promise<void> {
   try {
-    const data = await apiRequest('POST', {
-      type: 'ADD_LEAD',
-      data: lead
-    })
+    // Primeiro, adicionar localmente para resposta imediata
+    const newLead: Lead = {
+      ...lead,
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      data: new Date().toISOString(),
+      status: 'novo'
+    }
+    
+    cache.leads.unshift(newLead)
+    
+    // Salvar no localStorage imediatamente
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
+    }
 
-    if (data) {
-      cache.leads = data.leads
-      cache.lastUpdate = data.lastUpdate
+    // Tentar sincronizar com API em background
+    try {
+      const data = await apiRequest('POST', {
+        type: 'ADD_LEAD',
+        data: lead
+      })
 
-      // Backup no localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
+      if (data) {
+        cache.leads = data.leads
+        cache.lastUpdate = data.lastUpdate
+
+        // Atualizar localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
+        }
       }
+    } catch (apiError) {
+      console.warn('Erro na sincronização com API, mantendo dados locais:', apiError)
     }
   } catch (error) {
     console.error('Erro ao adicionar lead:', error)
-    // Fallback: adicionar apenas no localStorage
-    if (typeof window !== 'undefined') {
-      const newLead: Lead = {
-        ...lead,
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-        data: new Date().toISOString(),
-        status: 'novo'
-      }
-      cache.leads.unshift(newLead)
-      localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
-    }
+    throw error
   }
 }
 
 export async function salvarLeads(leads: Lead[]): Promise<void> {
   try {
-    const data = await apiRequest('POST', {
-      type: 'UPDATE_LEADS',
-      data: leads
-    })
+    cache.leads = leads
+    
+    // Salvar no localStorage imediatamente
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nutri-leads', JSON.stringify(leads))
+    }
 
-    if (data) {
-      cache.leads = data.leads
-      cache.lastUpdate = data.lastUpdate
+    // Tentar sincronizar com API
+    try {
+      const data = await apiRequest('POST', {
+        type: 'UPDATE_LEADS',
+        data: leads
+      })
 
-      // Backup no localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
+      if (data) {
+        cache.leads = data.leads
+        cache.lastUpdate = data.lastUpdate
       }
+    } catch (apiError) {
+      console.warn('Erro na sincronização com API:', apiError)
     }
   } catch (error) {
     console.error('Erro ao salvar leads:', error)
-    // Fallback: salvar apenas no localStorage
-    if (typeof window !== 'undefined') {
-      cache.leads = leads
-      localStorage.setItem('nutri-leads', JSON.stringify(leads))
-    }
   }
 }
 
@@ -272,27 +309,29 @@ export function carregarDepoimentosSync(): Depoimento[] {
 
 export async function salvarDepoimentos(depoimentos: Depoimento[]): Promise<void> {
   try {
-    const data = await apiRequest('POST', {
-      type: 'UPDATE_DEPOIMENTOS',
-      data: depoimentos
-    })
+    cache.depoimentos = depoimentos
+    
+    // Salvar no localStorage imediatamente
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nutri-depoimentos', JSON.stringify(depoimentos))
+    }
 
-    if (data) {
-      cache.depoimentos = data.depoimentos
-      cache.lastUpdate = data.lastUpdate
+    // Tentar sincronizar com API
+    try {
+      const data = await apiRequest('POST', {
+        type: 'UPDATE_DEPOIMENTOS',
+        data: depoimentos
+      })
 
-      // Backup no localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('nutri-depoimentos', JSON.stringify(cache.depoimentos))
+      if (data) {
+        cache.depoimentos = data.depoimentos
+        cache.lastUpdate = data.lastUpdate
       }
+    } catch (apiError) {
+      console.warn('Erro na sincronização com API:', apiError)
     }
   } catch (error) {
     console.error('Erro ao salvar depoimentos:', error)
-    // Fallback: salvar apenas no localStorage
-    if (typeof window !== 'undefined') {
-      cache.depoimentos = depoimentos
-      localStorage.setItem('nutri-depoimentos', JSON.stringify(depoimentos))
-    }
   }
 }
 
@@ -311,27 +350,29 @@ export function carregarConfigSync(): ConfigSite {
 
 export async function salvarConfig(config: ConfigSite): Promise<void> {
   try {
-    const data = await apiRequest('POST', {
-      type: 'UPDATE_CONFIG',
-      data: config
-    })
+    cache.config = config
+    
+    // Salvar no localStorage imediatamente
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nutri-config', JSON.stringify(config))
+    }
 
-    if (data) {
-      cache.config = data.config
-      cache.lastUpdate = data.lastUpdate
+    // Tentar sincronizar com API
+    try {
+      const data = await apiRequest('POST', {
+        type: 'UPDATE_CONFIG',
+        data: config
+      })
 
-      // Backup no localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('nutri-config', JSON.stringify(cache.config))
+      if (data) {
+        cache.config = data.config
+        cache.lastUpdate = data.lastUpdate
       }
+    } catch (apiError) {
+      console.warn('Erro na sincronização com API:', apiError)
     }
   } catch (error) {
     console.error('Erro ao salvar config:', error)
-    // Fallback: salvar apenas no localStorage
-    if (typeof window !== 'undefined') {
-      cache.config = config
-      localStorage.setItem('nutri-config', JSON.stringify(config))
-    }
   }
 }
 
