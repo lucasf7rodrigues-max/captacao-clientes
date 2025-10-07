@@ -58,6 +58,7 @@ export default function AdminPanel() {
   const [generatedLink, setGeneratedLink] = useState('')
   const [copySuccess, setCopySuccess] = useState(false)
   const [consultaPersonalizadaImage, setConsultaPersonalizadaImage] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
   // Credenciais de acesso (em produção, isso seria mais seguro)
   const ADMIN_CREDENTIALS = {
@@ -67,9 +68,22 @@ export default function AdminPanel() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      setLeads(carregarLeads())
-      setDepoimentos(carregarDepoimentos())
-      setConfigSite(carregarConfig())
+      loadData()
+    }
+  }, [isAuthenticated])
+
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const [leadsData, depoimentosData, configData] = await Promise.all([
+        carregarLeads(),
+        carregarDepoimentos(),
+        carregarConfig()
+      ])
+
+      setLeads(leadsData)
+      setDepoimentos(depoimentosData)
+      setConfigSite(configData)
       
       // Carregar imagens do localStorage
       const savedImages = localStorage.getItem('nutri-images')
@@ -82,8 +96,12 @@ export default function AdminPanel() {
       if (savedConsultaImage) {
         setConsultaPersonalizadaImage(savedConsultaImage)
       }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+    } finally {
+      setIsLoading(false)
     }
-  }, [isAuthenticated])
+  }
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
@@ -249,21 +267,21 @@ export default function AdminPanel() {
     }
   }
 
-  const updateLeadStatus = (leadId: string, newStatus: Lead['status']) => {
+  const updateLeadStatus = async (leadId: string, newStatus: Lead['status']) => {
     const leadsAtualizados = leads.map(lead => 
       lead.id === leadId ? { ...lead, status: newStatus } : lead
     )
     setLeads(leadsAtualizados)
-    salvarLeads(leadsAtualizados)
+    await salvarLeads(leadsAtualizados)
   }
 
-  const deleteLead = (leadId: string) => {
+  const deleteLead = async (leadId: string) => {
     const leadsAtualizados = leads.filter(lead => lead.id !== leadId)
     setLeads(leadsAtualizados)
-    salvarLeads(leadsAtualizados)
+    await salvarLeads(leadsAtualizados)
   }
 
-  const saveDepoimento = (depoimento: Omit<Depoimento, 'id'>) => {
+  const saveDepoimento = async (depoimento: Omit<Depoimento, 'id'>) => {
     let depoimentosAtualizados
     
     if (editingDepoimento) {
@@ -279,20 +297,20 @@ export default function AdminPanel() {
     }
     
     setDepoimentos(depoimentosAtualizados)
-    salvarDepoimentos(depoimentosAtualizados)
+    await salvarDepoimentos(depoimentosAtualizados)
     setEditingDepoimento(null)
     setShowDepoimentoForm(false)
   }
 
-  const deleteDepoimento = (id: string) => {
+  const deleteDepoimento = async (id: string) => {
     const depoimentosAtualizados = depoimentos.filter(d => d.id !== id)
     setDepoimentos(depoimentosAtualizados)
-    salvarDepoimentos(depoimentosAtualizados)
+    await salvarDepoimentos(depoimentosAtualizados)
   }
 
-  const saveConfigSite = () => {
+  const saveConfigSite = async () => {
     if (configSite) {
-      salvarConfig(configSite)
+      await salvarConfig(configSite)
       alert('Configurações salvas com sucesso! As mudanças aparecerão na página principal.')
     }
   }
@@ -530,7 +548,7 @@ export default function AdminPanel() {
     )
   }
 
-  if (!configSite) {
+  if (!configSite || isLoading) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center">
         <Settings className="h-12 w-12 text-emerald-600 mx-auto mb-4 animate-pulse" />
