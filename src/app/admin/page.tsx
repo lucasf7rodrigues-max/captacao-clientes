@@ -25,7 +25,9 @@ import {
   Lock,
   Link,
   Copy,
-  CheckCircle
+  CheckCircle,
+  Heart,
+  Camera
 } from 'lucide-react'
 import { 
   carregarLeads, 
@@ -55,6 +57,7 @@ export default function AdminPanel() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [generatedLink, setGeneratedLink] = useState('')
   const [copySuccess, setCopySuccess] = useState(false)
+  const [consultaPersonalizadaImage, setConsultaPersonalizadaImage] = useState<string | null>(null)
 
   // Credenciais de acesso (em produção, isso seria mais seguro)
   const ADMIN_CREDENTIALS = {
@@ -72,6 +75,12 @@ export default function AdminPanel() {
       const savedImages = localStorage.getItem('nutri-images')
       if (savedImages) {
         setUploadedImages(JSON.parse(savedImages))
+      }
+
+      // Carregar imagem da consulta personalizada
+      const savedConsultaImage = localStorage.getItem('consulta-personalizada-image')
+      if (savedConsultaImage) {
+        setConsultaPersonalizadaImage(savedConsultaImage)
       }
     }
   }, [isAuthenticated])
@@ -222,6 +231,12 @@ export default function AdminPanel() {
   const setProfileImage = (imageUrl: string) => {
     localStorage.setItem('nutri-profile-image', imageUrl)
     alert('Imagem definida como foto de perfil da nutricionista!')
+  }
+
+  const setConsultaImage = (imageUrl: string) => {
+    localStorage.setItem('consulta-personalizada-image', imageUrl)
+    setConsultaPersonalizadaImage(imageUrl)
+    alert('Imagem definida para a seção "Consulta Personalizada"!')
   }
 
   const getStatusColor = (status: string) => {
@@ -1152,9 +1167,16 @@ export default function AdminPanel() {
                             <button
                               onClick={() => setProfileImage(imageUrl)}
                               className="bg-emerald-500 text-white p-2 rounded-full hover:bg-emerald-600 transition-colors"
-                              title="Usar como foto de perfil"
+                              title="Usar como foto de perfil da nutricionista"
                             >
                               <Star className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setConsultaImage(imageUrl)}
+                              className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition-colors"
+                              title="Usar na seção Consulta Personalizada"
+                            >
+                              <Heart className="h-4 w-4" />
                             </button>
                             <button
                               onClick={() => deleteImage(index)}
@@ -1177,7 +1199,8 @@ export default function AdminPanel() {
                     <li>• Adicione imagens de antes/depois dos seus clientes (com autorização)</li>
                     <li>• Inclua fotos do seu consultório ou ambiente de trabalho</li>
                     <li>• Mantenha qualidade alta mas tamanho otimizado (máx 2MB por imagem)</li>
-                    <li>• Clique na estrela para definir uma imagem como sua foto de perfil</li>
+                    <li>• <strong>⭐ Estrela:</strong> Define como foto de perfil da nutricionista</li>
+                    <li>• <strong>💚 Coração:</strong> Define para a seção "Consulta Personalizada"</li>
                   </ul>
                 </div>
               </div>
