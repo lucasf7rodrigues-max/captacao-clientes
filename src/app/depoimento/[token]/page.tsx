@@ -13,6 +13,7 @@ interface DepoimentoPageProps {
 export default function DepoimentoPage({ params }: DepoimentoPageProps) {
   const [leadData, setLeadData] = useState<{ nome: string; email: string } | null>(null)
   const [showSuccessPopup, setShowSuccessPopup] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     texto: '',
     resultado: '',
@@ -21,45 +22,71 @@ export default function DepoimentoPage({ params }: DepoimentoPageProps) {
 
   useEffect(() => {
     // Recuperar dados do lead baseado no token
-    const savedTokens = localStorage.getItem('depoimento-tokens')
-    if (savedTokens) {
-      const tokens = JSON.parse(savedTokens)
-      const tokenData = tokens[params.token]
-      if (tokenData) {
-        setLeadData(tokenData)
+    if (typeof window !== 'undefined') {
+      const savedTokens = localStorage.getItem('depoimento-tokens')
+      if (savedTokens) {
+        try {
+          const tokens = JSON.parse(savedTokens)
+          const tokenData = tokens[params.token]
+          if (tokenData && !tokenData.usado) {
+            setLeadData(tokenData)
+          }
+        } catch (error) {
+          console.error('Erro ao carregar token:', error)
+        }
       }
     }
   }, [params.token])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!leadData) return
+    if (!leadData || isSubmitting) return
 
-    // Criar novo depoimento
-    const novoDepoimento: Depoimento = {
-      id: Date.now().toString(),
-      nome: leadData.nome,
-      iniciais: leadData.nome.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
-      texto: formData.texto,
-      resultado: formData.resultado,
-      estrelas: formData.estrelas
+    // Validar campos obrigatórios
+    if (!formData.texto.trim() || !formData.resultado.trim()) {
+      alert('Por favor, preencha todos os campos obrigatórios.')
+      return
     }
 
-    // Salvar depoimento
-    const depoimentosExistentes = carregarDepoimentos()
-    const novosDepoimentos = [...depoimentosExistentes, novoDepoimento]
-    salvarDepoimentos(novosDepoimentos)
+    setIsSubmitting(true)
 
-    // Marcar token como usado
-    const savedTokens = localStorage.getItem('depoimento-tokens')
-    if (savedTokens) {
-      const tokens = JSON.parse(savedTokens)
-      tokens[params.token].usado = true
-      localStorage.setItem('depoimento-tokens', JSON.stringify(tokens))
+    try {
+      // Criar novo depoimento
+      const novoDepoimento: Depoimento = {
+        id: Date.now().toString(),
+        nome: leadData.nome,
+        iniciais: leadData.nome.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+        texto: formData.texto.trim(),
+        resultado: formData.resultado.trim(),
+        estrelas: formData.estrelas
+      }
+
+      // Salvar depoimento
+      const depoimentosExistentes = carregarDepoimentos()
+      const novosDepoimentos = [...depoimentosExistentes, novoDepoimento]
+      salvarDepoimentos(novosDepoimentos)
+
+      // Marcar token como usado
+      if (typeof window !== 'undefined') {
+        const savedTokens = localStorage.getItem('depoimento-tokens')
+        if (savedTokens) {
+          const tokens = JSON.parse(savedTokens)
+          if (tokens[params.token]) {
+            tokens[params.token].usado = true
+            tokens[params.token].dataUso = new Date().toISOString()
+            localStorage.setItem('depoimento-tokens', JSON.stringify(tokens))
+          }
+        }
+      }
+
+      setShowSuccessPopup(true)
+    } catch (error) {
+      console.error('Erro ao salvar depoimento:', error)
+      alert('Erro ao enviar depoimento. Tente novamente.')
+    } finally {
+      setIsSubmitting(false)
     }
-
-    setShowSuccessPopup(true)
   }
 
   if (!leadData) {
@@ -96,14 +123,14 @@ export default function DepoimentoPage({ params }: DepoimentoPageProps) {
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Depoimento Enviado!</h3>
             <p className="text-gray-600 mb-6">
-              Obrigado por compartilhar sua experiência! Seu depoimento foi salvo com sucesso.
+              Obrigado por compartilhar sua experiência! Seu depoimento foi salvo com sucesso e aparecerá no site.
             </p>
             <a 
               href="/"
               className="inline-flex items-center space-x-2 bg-emerald-600 text-white px-6 py-3 rounded-lg hover:bg-emerald-700 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Voltar ao Site</span>
+              <span>Ver no Site</span>
             </a>
           </div>
         </div>
@@ -126,7 +153,7 @@ export default function DepoimentoPage({ params }: DepoimentoPageProps) {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Como foi sua experiência? Conte-nos sobre os resultados obtidos:
+                Como foi sua experiência? Conte-nos sobre os resultados obtidos: *
               </label>
               <textarea
                 required
@@ -135,12 +162,13 @@ export default function DepoimentoPage({ params }: DepoimentoPageProps) {
                 onChange={(e) => setFormData({...formData, texto: e.target.value})}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 placeholder="Descreva sua experiência, como se sentiu durante o processo, quais mudanças notou..."
+                disabled={isSubmitting}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Qual foi o principal resultado alcançado?
+                Qual foi o principal resultado alcançado? *
               </label>
               <input
                 type="text"
@@ -149,6 +177,7 @@ export default function DepoimentoPage({ params }: DepoimentoPageProps) {
                 onChange={(e) => setFormData({...formData, resultado: e.target.value})}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 placeholder="Ex: Perdeu 10kg, Ganhou massa muscular, Melhorou a saúde..."
+                disabled={isSubmitting}
               />
             </div>
 
@@ -165,6 +194,7 @@ export default function DepoimentoPage({ params }: DepoimentoPageProps) {
                     className={`p-1 transition-colors ${
                       star <= formData.estrelas ? 'text-yellow-400' : 'text-gray-300'
                     }`}
+                    disabled={isSubmitting}
                   >
                     <Star className="h-8 w-8 fill-current" />
                   </button>
@@ -187,9 +217,14 @@ export default function DepoimentoPage({ params }: DepoimentoPageProps) {
 
             <button
               type="submit"
-              className="w-full bg-emerald-600 text-white py-4 px-6 rounded-lg text-lg font-semibold hover:bg-emerald-700 transition-colors"
+              disabled={isSubmitting}
+              className={`w-full py-4 px-6 rounded-lg text-lg font-semibold transition-colors ${
+                isSubmitting 
+                  ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
+              }`}
             >
-              Enviar Depoimento
+              {isSubmitting ? 'Enviando...' : 'Enviar Depoimento'}
             </button>
           </form>
         </div>
