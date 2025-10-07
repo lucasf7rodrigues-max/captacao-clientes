@@ -63,9 +63,9 @@ export default function DepoimentoPage({ params }: DepoimentoPageProps) {
       }
 
       // Salvar depoimento
-      const depoimentosExistentes = carregarDepoimentos()
+      const depoimentosExistentes = await carregarDepoimentos()
       const novosDepoimentos = [...depoimentosExistentes, novoDepoimento]
-      salvarDepoimentos(novosDepoimentos)
+      await salvarDepoimentos(novosDepoimentos)
 
       // Marcar token como usado
       if (typeof window !== 'undefined') {
