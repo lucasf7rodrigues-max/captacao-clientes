@@ -1,5 +1,5 @@
-// Simulação de dados para demonstração
-// Em produção, isso seria substituído por um banco de dados real
+// Sistema de dados para o site de nutrição
+// Versão com API para produção
 
 export interface Lead {
   id: string
@@ -23,14 +23,14 @@ export interface Depoimento {
 
 export interface ConfigSite {
   nomeSite: string
+  crn: string
   telefone: string
   email: string
   endereco: string
   horarioAtendimento: string
-  crn: string
-  sobreTexto: string
   heroTitulo: string
   heroSubtitulo: string
+  sobreTexto: string
   estatisticas: {
     clientes: string
     sucesso: string
@@ -38,173 +38,305 @@ export interface ConfigSite {
   }
 }
 
-// Função para formatar nome (primeira letra maiúscula)
-const formatarNome = (nome: string): string => {
-  return nome.toLowerCase().replace(/\b\w/g, l => l.toUpperCase())
+// Cache local para melhor performance
+let cache = {
+  leads: [] as Lead[],
+  depoimentos: [] as Depoimento[],
+  config: null as ConfigSite | null,
+  lastUpdate: null as string | null,
+  initialized: false
 }
 
-// Função para formatar telefone
-const formatarTelefone = (telefone: string): string => {
-  // Remove todos os caracteres não numéricos
-  const numeros = telefone.replace(/\D/g, '')
-  
-  // Se tem 11 dígitos (celular com DDD)
-  if (numeros.length === 11) {
-    return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 7)}-${numeros.slice(7)}`
-  }
-  // Se tem 10 dígitos (fixo com DDD)
-  else if (numeros.length === 10) {
-    return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 6)}-${numeros.slice(6)}`
-  }
-  // Se já está formatado ou tem formato diferente, retorna como está
-  return telefone
-}
+// Função para fazer requisições à API
+async function apiRequest(method: 'GET' | 'POST', data?: any) {
+  try {
+    const options: RequestInit = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
 
-// Dados iniciais para demonstração
-export const leadsIniciais: Lead[] = [
-  {
-    id: '1',
-    nome: 'Maria Silva',
-    email: 'maria@email.com',
-    telefone: '(11) 99999-9999',
-    objetivo: 'emagrecimento',
-    detalhes: 'Preciso perder 10kg para meu casamento',
-    data: '2024-01-15T14:30:00.000Z',
-    status: 'novo'
-  },
-  {
-    id: '2',
-    nome: 'João Santos',
-    email: 'joao@email.com',
-    telefone: '(11) 88888-8888',
-    objetivo: 'ganho-massa',
-    detalhes: 'Quero ganhar massa muscular para competir',
-    data: '2024-01-14T09:15:00.000Z',
-    status: 'contatado'
-  },
-  {
-    id: '3',
-    nome: 'Ana Costa',
-    email: 'ana@email.com',
-    telefone: '(11) 77777-7777',
-    objetivo: 'reeducacao',
-    detalhes: 'Tenho diabetes e preciso melhorar minha alimentação',
-    data: '2024-01-13T16:45:00.000Z',
-    status: 'agendado'
-  },
-  {
-    id: '4',
-    nome: 'Carlos Oliveira',
-    email: 'carlos@email.com',
-    telefone: '(11) 66666-6666',
-    objetivo: 'emagrecimento',
-    detalhes: 'Quero perder barriga e melhorar minha saúde',
-    data: '2024-01-12T11:20:00.000Z',
-    status: 'convertido'
-  }
-]
+    if (method === 'POST' && data) {
+      options.body = JSON.stringify(data)
+    }
 
-export const depoimentosIniciais: Depoimento[] = [
-  {
-    id: '1',
-    nome: 'Maria Silva',
-    iniciais: 'M',
-    texto: 'Perdi 15kg em 4 meses de forma saudável e sem passar fome. O acompanhamento foi fundamental para meu sucesso!',
-    resultado: 'Perdeu 15kg',
-    estrelas: 5
-  },
-  {
-    id: '2',
-    nome: 'João Santos',
-    iniciais: 'J',
-    texto: 'Consegui ganhar massa muscular seguindo as orientações. Profissional muito competente e atenciosa!',
-    resultado: 'Ganhou 8kg de massa',
-    estrelas: 5
-  },
-  {
-    id: '3',
-    nome: 'Ana Costa',
-    iniciais: 'A',
-    texto: 'Mudou completamente minha relação com a comida. Hoje tenho uma alimentação equilibrada e prazerosa!',
-    resultado: 'Reeducação alimentar',
-    estrelas: 5
-  }
-]
+    const response = await fetch('/api/data', options)
+    const result = await response.json()
 
-export const configInicial: ConfigSite = {
-  nomeSite: 'NutriVida',
-  telefone: '(11) 98244-9680',
-  email: 'contato@nutrivida.com',
-  endereco: 'São Paulo, SP',
-  horarioAtendimento: 'Segunda a Sexta: 8h às 18h\nSábado: 8h às 12h',
-  crn: '12345',
-  sobreTexto: 'Sou formada em Nutrição pela Universidade Federal, com especialização em Nutrição Clínica e Esportiva. Há mais de 5 anos ajudo pessoas a transformarem sua relação com a comida e alcançarem seus objetivos de saúde.',
-  heroTitulo: 'Transforme sua saúde com nutrição personalizada',
-  heroSubtitulo: 'Nutricionista especializada em emagrecimento saudável, ganho de massa muscular e reeducação alimentar. Planos personalizados que cabem na sua rotina.',
-  estatisticas: {
-    clientes: '500+',
-    sucesso: '95%',
-    experiencia: '5+'
+    if (!result.success) {
+      throw new Error(result.error || 'Erro na API')
+    }
+
+    return result.data
+  } catch (error) {
+    console.error('Erro na API:', error)
+    // Fallback para localStorage em caso de erro
+    return getFallbackData()
   }
 }
 
-// Funções utilitárias para localStorage (simulando backend)
-export const salvarLeads = (leads: Lead[]) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('nutri-leads', JSON.stringify(leads))
+// Fallback para localStorage
+function getFallbackData() {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const leads = localStorage.getItem('nutri-leads')
+    const depoimentos = localStorage.getItem('nutri-depoimentos')
+    const config = localStorage.getItem('nutri-config')
+
+    return {
+      leads: leads ? JSON.parse(leads) : [],
+      depoimentos: depoimentos ? JSON.parse(depoimentos) : getDepoimentosPadrao(),
+      config: config ? JSON.parse(config) : getConfigPadrao(),
+      lastUpdate: new Date().toISOString()
+    }
+  } catch (error) {
+    console.error('Erro no fallback:', error)
+    return {
+      leads: [],
+      depoimentos: getDepoimentosPadrao(),
+      config: getConfigPadrao(),
+      lastUpdate: new Date().toISOString()
+    }
   }
 }
 
-export const carregarLeads = (): Lead[] => {
-  if (typeof window !== 'undefined') {
-    const dados = localStorage.getItem('nutri-leads')
-    return dados ? JSON.parse(dados) : leadsIniciais
-  }
-  return leadsIniciais
-}
-
-export const salvarDepoimentos = (depoimentos: Depoimento[]) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('nutri-depoimentos', JSON.stringify(depoimentos))
-  }
-}
-
-export const carregarDepoimentos = (): Depoimento[] => {
-  if (typeof window !== 'undefined') {
-    const dados = localStorage.getItem('nutri-depoimentos')
-    return dados ? JSON.parse(dados) : depoimentosIniciais
-  }
-  return depoimentosIniciais
-}
-
-export const salvarConfig = (config: ConfigSite) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('nutri-config', JSON.stringify(config))
+function getConfigPadrao(): ConfigSite {
+  return {
+    nomeSite: "NutriVida",
+    crn: "12345-SP",
+    telefone: "(11) 99999-9999",
+    email: "contato@nutrivida.com",
+    endereco: "São Paulo, SP",
+    horarioAtendimento: "Segunda a Sexta: 8h às 18h\nSábado: 8h às 12h",
+    heroTitulo: "Transforme sua saúde com nutrição personalizada",
+    heroSubtitulo: "Planos alimentares sob medida para seus objetivos, com acompanhamento profissional e resultados comprovados.",
+    sobreTexto: "Sou uma nutricionista apaixonada por ajudar pessoas a alcançarem seus objetivos de saúde através da alimentação. Com anos de experiência e centenas de pacientes atendidos, desenvolvo planos personalizados que se adaptam ao seu estilo de vida.",
+    estatisticas: {
+      clientes: "500+",
+      sucesso: "95%",
+      experiencia: "8+"
+    }
   }
 }
 
-export const carregarConfig = (): ConfigSite => {
-  if (typeof window !== 'undefined') {
-    const dados = localStorage.getItem('nutri-config')
-    return dados ? JSON.parse(dados) : configInicial
-  }
-  return configInicial
+function getDepoimentosPadrao(): Depoimento[] {
+  return [
+    {
+      id: '1',
+      nome: 'Maria Silva',
+      iniciais: 'MS',
+      texto: 'Perdi 15kg em 4 meses seguindo o plano alimentar. Me sinto muito mais disposta e saudável!',
+      resultado: 'Perdeu 15kg',
+      estrelas: 5
+    },
+    {
+      id: '2',
+      nome: 'João Santos',
+      iniciais: 'JS',
+      texto: 'Consegui ganhar massa muscular de forma saudável. O acompanhamento foi fundamental para meus resultados.',
+      resultado: 'Ganhou 8kg de massa magra',
+      estrelas: 5
+    },
+    {
+      id: '3',
+      nome: 'Ana Costa',
+      iniciais: 'AC',
+      texto: 'Aprendi a me alimentar melhor e agora tenho muito mais energia no dia a dia. Recomendo!',
+      resultado: 'Melhorou disposição e saúde',
+      estrelas: 5
+    }
+  ]
 }
 
-export const adicionarLead = (lead: Omit<Lead, 'id' | 'data' | 'status'>) => {
-  const leads = carregarLeads()
-  
-  // Formatar dados antes de salvar
-  const novoLead: Lead = {
-    ...lead,
-    nome: formatarNome(lead.nome),
-    telefone: formatarTelefone(lead.telefone),
-    id: Date.now().toString(),
-    data: new Date().toISOString(), // Salva com horário completo
-    status: 'novo'
+// Inicializar cache
+async function initializeCache() {
+  if (cache.initialized) return
+
+  try {
+    const data = await apiRequest('GET')
+    if (data) {
+      cache.leads = data.leads || []
+      cache.depoimentos = data.depoimentos || getDepoimentosPadrao()
+      cache.config = data.config || getConfigPadrao()
+      cache.lastUpdate = data.lastUpdate
+      cache.initialized = true
+
+      // Salvar no localStorage como backup
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
+        localStorage.setItem('nutri-depoimentos', JSON.stringify(cache.depoimentos))
+        localStorage.setItem('nutri-config', JSON.stringify(cache.config))
+      }
+    }
+  } catch (error) {
+    console.error('Erro ao inicializar cache:', error)
+    // Usar dados do localStorage como fallback
+    const fallbackData = getFallbackData()
+    if (fallbackData) {
+      cache.leads = fallbackData.leads
+      cache.depoimentos = fallbackData.depoimentos
+      cache.config = fallbackData.config
+      cache.lastUpdate = fallbackData.lastUpdate
+    }
+    cache.initialized = true
   }
-  
-  const leadsAtualizados = [novoLead, ...leads]
-  salvarLeads(leadsAtualizados)
-  return novoLead
+}
+
+// Funções públicas
+export async function carregarLeads(): Promise<Lead[]> {
+  await initializeCache()
+  return [...cache.leads]
+}
+
+export function carregarLeadsSync(): Lead[] {
+  if (!cache.initialized) {
+    // Tentar carregar do localStorage para uso síncrono
+    const fallbackData = getFallbackData()
+    return fallbackData?.leads || []
+  }
+  return [...cache.leads]
+}
+
+export async function adicionarLead(lead: Omit<Lead, 'id' | 'data' | 'status'>): Promise<void> {
+  try {
+    const data = await apiRequest('POST', {
+      type: 'ADD_LEAD',
+      data: lead
+    })
+
+    if (data) {
+      cache.leads = data.leads
+      cache.lastUpdate = data.lastUpdate
+
+      // Backup no localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
+      }
+    }
+  } catch (error) {
+    console.error('Erro ao adicionar lead:', error)
+    // Fallback: adicionar apenas no localStorage
+    if (typeof window !== 'undefined') {
+      const newLead: Lead = {
+        ...lead,
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        data: new Date().toISOString(),
+        status: 'novo'
+      }
+      cache.leads.unshift(newLead)
+      localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
+    }
+  }
+}
+
+export async function salvarLeads(leads: Lead[]): Promise<void> {
+  try {
+    const data = await apiRequest('POST', {
+      type: 'UPDATE_LEADS',
+      data: leads
+    })
+
+    if (data) {
+      cache.leads = data.leads
+      cache.lastUpdate = data.lastUpdate
+
+      // Backup no localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
+      }
+    }
+  } catch (error) {
+    console.error('Erro ao salvar leads:', error)
+    // Fallback: salvar apenas no localStorage
+    if (typeof window !== 'undefined') {
+      cache.leads = leads
+      localStorage.setItem('nutri-leads', JSON.stringify(leads))
+    }
+  }
+}
+
+export async function carregarDepoimentos(): Promise<Depoimento[]> {
+  await initializeCache()
+  return [...cache.depoimentos]
+}
+
+export function carregarDepoimentosSync(): Depoimento[] {
+  if (!cache.initialized) {
+    const fallbackData = getFallbackData()
+    return fallbackData?.depoimentos || getDepoimentosPadrao()
+  }
+  return [...cache.depoimentos]
+}
+
+export async function salvarDepoimentos(depoimentos: Depoimento[]): Promise<void> {
+  try {
+    const data = await apiRequest('POST', {
+      type: 'UPDATE_DEPOIMENTOS',
+      data: depoimentos
+    })
+
+    if (data) {
+      cache.depoimentos = data.depoimentos
+      cache.lastUpdate = data.lastUpdate
+
+      // Backup no localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('nutri-depoimentos', JSON.stringify(cache.depoimentos))
+      }
+    }
+  } catch (error) {
+    console.error('Erro ao salvar depoimentos:', error)
+    // Fallback: salvar apenas no localStorage
+    if (typeof window !== 'undefined') {
+      cache.depoimentos = depoimentos
+      localStorage.setItem('nutri-depoimentos', JSON.stringify(depoimentos))
+    }
+  }
+}
+
+export async function carregarConfig(): Promise<ConfigSite> {
+  await initializeCache()
+  return { ...cache.config! }
+}
+
+export function carregarConfigSync(): ConfigSite {
+  if (!cache.initialized || !cache.config) {
+    const fallbackData = getFallbackData()
+    return fallbackData?.config || getConfigPadrao()
+  }
+  return { ...cache.config }
+}
+
+export async function salvarConfig(config: ConfigSite): Promise<void> {
+  try {
+    const data = await apiRequest('POST', {
+      type: 'UPDATE_CONFIG',
+      data: config
+    })
+
+    if (data) {
+      cache.config = data.config
+      cache.lastUpdate = data.lastUpdate
+
+      // Backup no localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('nutri-config', JSON.stringify(cache.config))
+      }
+    }
+  } catch (error) {
+    console.error('Erro ao salvar config:', error)
+    // Fallback: salvar apenas no localStorage
+    if (typeof window !== 'undefined') {
+      cache.config = config
+      localStorage.setItem('nutri-config', JSON.stringify(config))
+    }
+  }
+}
+
+// Função para sincronização manual
+export async function sincronizarDados(): Promise<void> {
+  cache.initialized = false
+  await initializeCache()
 }
