@@ -58,8 +58,8 @@ export default function AdminPanel() {
 
   // Credenciais de acesso (em produção, isso seria mais seguro)
   const ADMIN_CREDENTIALS = {
-    username: 'admin',
-    password: 'nutri2024@admin'
+    username: 'fabiane',
+    password: 'Fabi@2410'
   }
 
   useEffect(() => {
@@ -503,13 +503,6 @@ export default function AdminPanel() {
             </button>
           </form>
           
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-500 text-center">
-              <strong>Credenciais de demonstração:</strong><br/>
-              Usuário: admin<br/>
-              Senha: nutri2024@admin
-            </p>
-          </div>
         </div>
       </div>
     )
