@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Star, Heart, Users, Award, Phone, Mail, MapPin, Clock, CheckCircle, ArrowRight, Menu, X, Camera } from 'lucide-react'
-import { adicionarLead, carregarConfig, carregarDepoimentos, type ConfigSite, type Depoimento } from '@/lib/data'
+import { adicionarLead, carregarConfigSync, carregarDepoimentosSync, type ConfigSite, type Depoimento } from '@/lib/data'
 
 export default function NutricionistaLanding() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -11,6 +11,7 @@ export default function NutricionistaLanding() {
   const [showSuccessPopup, setShowSuccessPopup] = useState(false)
   const [nutricionistaImage, setNutricionistaImage] = useState<string | null>(null)
   const [consultaPersonalizadaImage, setConsultaPersonalizadaImage] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
@@ -20,8 +21,9 @@ export default function NutricionistaLanding() {
   })
 
   useEffect(() => {
-    setConfig(carregarConfig())
-    setDepoimentos(carregarDepoimentos())
+    // Carregar dados iniciais de forma síncrona para evitar loading
+    setConfig(carregarConfigSync())
+    setDepoimentos(carregarDepoimentosSync())
     
     // Carregar imagem da nutricionista do localStorage
     const savedImage = localStorage.getItem('nutri-profile-image')
@@ -36,7 +38,7 @@ export default function NutricionistaLanding() {
     }
   }, [])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     // Validar campos obrigatórios
@@ -45,9 +47,13 @@ export default function NutricionistaLanding() {
       return
     }
     
+    if (isSubmitting) return
+    
+    setIsSubmitting(true)
+    
     try {
       // Adicionar lead ao sistema
-      adicionarLead({
+      await adicionarLead({
         nome: formData.nome,
         email: formData.email,
         telefone: formData.telefone,
@@ -63,6 +69,8 @@ export default function NutricionistaLanding() {
     } catch (error) {
       console.error('Erro ao enviar formulário:', error)
       alert('Erro ao enviar formulário. Tente novamente.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -424,6 +432,7 @@ export default function NutricionistaLanding() {
                     onChange={(e) => setFormData({...formData, nome: e.target.value})}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     placeholder="Seu nome completo"
+                    disabled={isSubmitting}
                   />
                 </div>
                 
@@ -436,6 +445,7 @@ export default function NutricionistaLanding() {
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     placeholder="seu@email.com"
+                    disabled={isSubmitting}
                   />
                 </div>
                 
@@ -448,6 +458,7 @@ export default function NutricionistaLanding() {
                     onChange={(e) => setFormData({...formData, telefone: e.target.value})}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     placeholder="(11) 99999-9999"
+                    disabled={isSubmitting}
                   />
                 </div>
                 
@@ -458,6 +469,7 @@ export default function NutricionistaLanding() {
                     value={formData.objetivo}
                     onChange={(e) => setFormData({...formData, objetivo: e.target.value})}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    disabled={isSubmitting}
                   >
                     <option value="">Selecione seu objetivo</option>
                     <option value="emagrecimento">Emagrecimento</option>
@@ -479,15 +491,21 @@ export default function NutricionistaLanding() {
                       onChange={(e) => setFormData({...formData, detalhes: e.target.value})}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                       placeholder="Descreva o que você espera alcançar, suas dificuldades atuais, histórico de saúde relevante, etc."
+                      disabled={isSubmitting}
                     />
                   </div>
                 )}
                 
                 <button
                   type="submit"
-                  className="w-full bg-emerald-600 text-white py-4 px-6 rounded-lg text-lg font-semibold hover:bg-emerald-700 transition-colors"
+                  disabled={isSubmitting}
+                  className={`w-full py-4 px-6 rounded-lg text-lg font-semibold transition-colors ${
+                    isSubmitting 
+                      ? 'bg-gray-400 text-gray-600 cursor-not-allowed' 
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  }`}
                 >
-                  Solicitar Consulta
+                  {isSubmitting ? 'Enviando...' : 'Solicitar Consulta'}
                 </button>
               </form>
             </div>
