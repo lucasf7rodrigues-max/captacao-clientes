@@ -10,6 +10,7 @@ export default function NutricionistaLanding() {
   const [depoimentos, setDepoimentos] = useState<Depoimento[]>([])
   const [showSuccessPopup, setShowSuccessPopup] = useState(false)
   const [nutricionistaImage, setNutricionistaImage] = useState<string | null>(null)
+  const [consultaPersonalizadaImage, setConsultaPersonalizadaImage] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
@@ -26,6 +27,12 @@ export default function NutricionistaLanding() {
     const savedImage = localStorage.getItem('nutri-profile-image')
     if (savedImage) {
       setNutricionistaImage(savedImage)
+    }
+
+    // Carregar imagem da consulta personalizada do localStorage
+    const savedConsultaImage = localStorage.getItem('consulta-personalizada-image')
+    if (savedConsultaImage) {
+      setConsultaPersonalizadaImage(savedConsultaImage)
     }
   }, [])
 
@@ -191,9 +198,22 @@ export default function NutricionistaLanding() {
             <div className="relative">
               <div className="bg-white rounded-2xl shadow-2xl p-8 transform rotate-3 hover:rotate-0 transition-transform duration-300">
                 <div className="bg-emerald-100 rounded-xl p-6 text-center">
-                  <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 shadow-lg">
-                    <Heart className="h-10 w-10 text-white" />
-                  </div>
+                  {consultaPersonalizadaImage ? (
+                    <div className="relative mb-6">
+                      <img 
+                        src={consultaPersonalizadaImage} 
+                        alt="Consulta Personalizada" 
+                        className="w-full h-40 object-cover rounded-xl shadow-lg"
+                      />
+                      <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm rounded-lg px-3 py-1 shadow-lg">
+                        <p className="text-emerald-800 font-bold text-sm">Consulta Personalizada</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 shadow-lg">
+                      <Heart className="h-10 w-10 text-white" />
+                    </div>
+                  )}
                   <h3 className="text-2xl font-bold text-gray-900 mb-3">Consulta Personalizada</h3>
                   <p className="text-gray-700 leading-relaxed mb-4">
                     Avaliação completa e plano alimentar sob medida para seus objetivos específicos
