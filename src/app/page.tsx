@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { Star, Heart, Users, Award, Phone, Mail, MapPin, Clock, CheckCircle, ArrowRight, Menu, X } from 'lucide-react'
+import { Star, Heart, Users, Award, Phone, Mail, MapPin, Clock, CheckCircle, ArrowRight, Menu, X, Camera } from 'lucide-react'
 import { adicionarLead, carregarConfig, carregarDepoimentos, type ConfigSite, type Depoimento } from '@/lib/data'
 
 export default function NutricionistaLanding() {
@@ -32,18 +32,31 @@ export default function NutricionistaLanding() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Adicionar lead ao sistema
-    adicionarLead({
-      nome: formData.nome,
-      email: formData.email,
-      telefone: formData.telefone,
-      objetivo: formData.objetivo,
-      detalhes: formData.detalhes
-    })
+    // Validar campos obrigatórios
+    if (!formData.nome || !formData.email || !formData.telefone || !formData.objetivo) {
+      alert('Por favor, preencha todos os campos obrigatórios.')
+      return
+    }
     
-    // Mostrar popup de sucesso
-    setShowSuccessPopup(true)
-    setFormData({ nome: '', email: '', telefone: '', objetivo: '', detalhes: '' })
+    try {
+      // Adicionar lead ao sistema
+      adicionarLead({
+        nome: formData.nome,
+        email: formData.email,
+        telefone: formData.telefone,
+        objetivo: formData.objetivo,
+        detalhes: formData.detalhes
+      })
+      
+      // Mostrar popup de sucesso
+      setShowSuccessPopup(true)
+      
+      // Limpar formulário
+      setFormData({ nome: '', email: '', telefone: '', objetivo: '', detalhes: '' })
+    } catch (error) {
+      console.error('Erro ao enviar formulário:', error)
+      alert('Erro ao enviar formulário. Tente novamente.')
+    }
   }
 
   const scrollToSection = (sectionId: string) => {
@@ -177,10 +190,18 @@ export default function NutricionistaLanding() {
             
             <div className="relative">
               <div className="bg-white rounded-2xl shadow-2xl p-8 transform rotate-3 hover:rotate-0 transition-transform duration-300">
-                <div className="bg-emerald-100 rounded-xl p-6">
-                  <Heart className="h-16 w-16 text-emerald-600 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-center text-gray-900 mb-2">Consulta Personalizada</h3>
-                  <p className="text-gray-600 text-center">Avaliação completa e plano alimentar sob medida para seus objetivos</p>
+                <div className="bg-emerald-100 rounded-xl p-6 text-center">
+                  <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6 shadow-lg">
+                    <Heart className="h-10 w-10 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">Consulta Personalizada</h3>
+                  <p className="text-gray-700 leading-relaxed mb-4">
+                    Avaliação completa e plano alimentar sob medida para seus objetivos específicos
+                  </p>
+                  <div className="flex items-center justify-center space-x-2 text-emerald-700">
+                    <CheckCircle className="h-5 w-5" />
+                    <span className="text-sm font-medium">Resultados comprovados</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -192,20 +213,25 @@ export default function NutricionistaLanding() {
       <section id="sobre" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div>
+            <div className="relative">
               {nutricionistaImage ? (
-                <div className="bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl p-4 h-96 flex items-center justify-center">
+                <div className="relative bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl p-4 h-96">
                   <img 
                     src={nutricionistaImage} 
                     alt="Nutricionista" 
                     className="w-full h-full object-cover rounded-xl shadow-lg"
                   />
+                  {/* CRN overlay profissional */}
+                  <div className="absolute top-6 left-6 bg-white/95 backdrop-blur-sm rounded-lg px-4 py-2 shadow-lg">
+                    <p className="text-emerald-800 font-bold text-sm">CRN: {config.crn}</p>
+                    <p className="text-emerald-700 text-xs">Nutricionista Clínica</p>
+                  </div>
                 </div>
               ) : (
                 <div className="bg-gradient-to-br from-emerald-100 to-teal-100 rounded-2xl p-8 h-96 flex items-center justify-center">
                   <div className="text-center">
                     <Award className="h-24 w-24 text-emerald-600 mx-auto mb-4" />
-                    <p className="text-emerald-800 font-semibold">CRN: {config.crn}</p>
+                    <p className="text-emerald-800 font-semibold text-lg">CRN: {config.crn}</p>
                     <p className="text-emerald-700">Nutricionista Clínica</p>
                   </div>
                 </div>
@@ -370,7 +396,7 @@ export default function NutricionistaLanding() {
               <h3 className="text-2xl font-bold text-gray-900 mb-6">Solicite sua consulta</h3>
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Nome completo</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Nome completo *</label>
                   <input
                     type="text"
                     required
@@ -382,7 +408,7 @@ export default function NutricionistaLanding() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">E-mail</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">E-mail *</label>
                   <input
                     type="email"
                     required
@@ -394,7 +420,7 @@ export default function NutricionistaLanding() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Telefone</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Telefone *</label>
                   <input
                     type="tel"
                     required
@@ -406,7 +432,7 @@ export default function NutricionistaLanding() {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Qual seu objetivo?</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Qual seu objetivo? *</label>
                   <select
                     required
                     value={formData.objetivo}
