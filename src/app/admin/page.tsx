@@ -42,8 +42,8 @@ import {
 } from '@/lib/data'
 
 export default function AdminPanel() {
-  const [activeTab, setActiveTab] = useState('login')
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [activeTab, setActiveTab] = useState('dashboard')
+  const [isAuthenticated, setIsAuthenticated] = useState(true)
   const [loginData, setLoginData] = useState({ username: '', password: '' })
   const [leads, setLeads] = useState<Lead[]>([])
   const [depoimentos, setDepoimentos] = useState<Depoimento[]>([])
