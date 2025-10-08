@@ -1,7 +1,5 @@
 // Sistema de dados para o site de nutrição
-// Versão com integração completa Supabase + fallback local
-
-import { supabase, isSupabaseConfigured } from './supabase'
+// Versão refatorada que usa API Routes para segurança
 
 export interface Lead {
   id: string
@@ -48,199 +46,6 @@ let cache = {
   config: null as ConfigSite | null,
   lastUpdate: null as string | null,
   initialized: false
-}
-
-// Função para fazer requisições à API com Supabase
-async function apiRequestWithSupabase(method: 'GET' | 'POST', data?: any) {
-  try {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Supabase não configurado')
-    }
-
-    const options: RequestInit = {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    }
-
-    if (method === 'POST' && data) {
-      options.body = JSON.stringify(data)
-    }
-
-    const response = await fetch('/api/data', options)
-    const result = await response.json()
-
-    if (!result.success) {
-      throw new Error(result.error || 'Erro na API')
-    }
-
-    return result.data
-  } catch (error) {
-    console.error('Erro na API:', error)
-    // Fallback para localStorage em caso de erro
-    return getFallbackData()
-  }
-}
-
-// Função para interagir diretamente com Supabase
-async function supabaseRequest(operation: string, data?: any) {
-  try {
-    if (!isSupabaseConfigured() || !supabase) {
-      throw new Error('Supabase não configurado')
-    }
-
-    switch (operation) {
-      case 'GET_LEADS':
-        const { data: leadsData, error: leadsError } = await supabase
-          .from('leads')
-          .select('*')
-          .order('created_at', { ascending: false })
-        
-        if (leadsError) throw leadsError
-        
-        // Converter formato do Supabase para formato local
-        return (leadsData || []).map((lead: any) => ({
-          id: lead.id.toString(),
-          nome: lead.nome,
-          email: lead.email,
-          telefone: lead.telefone,
-          objetivo: lead.mensagem.includes('emagrecimento') ? 'emagrecimento' : 
-                   lead.mensagem.includes('massa') ? 'ganho-massa' : 'reeducacao',
-          detalhes: lead.mensagem,
-          data: lead.created_at,
-          status: 'novo' as const
-        }))
-
-      case 'ADD_LEAD':
-        const { data: newLeadData, error: newLeadError } = await supabase
-          .from('leads')
-          .insert([{
-            nome: data.nome,
-            email: data.email,
-            telefone: data.telefone,
-            mensagem: `Objetivo: ${data.objetivo}. Detalhes: ${data.detalhes || 'Não informado'}`
-          }])
-          .select()
-        
-        if (newLeadError) throw newLeadError
-        return newLeadData
-
-      case 'GET_DEPOIMENTOS':
-        const { data: depData, error: depError } = await supabase
-          .from('depoimentos')
-          .select('*')
-          .eq('aprovado', true)
-          .order('created_at', { ascending: false })
-        
-        if (depError) throw depError
-        
-        // Converter formato do Supabase para formato local
-        return (depData || []).map((dep: any) => ({
-          id: dep.id.toString(),
-          nome: dep.nome,
-          iniciais: dep.nome.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
-          texto: dep.depoimento,
-          resultado: 'Cliente satisfeito',
-          estrelas: dep.avaliacao || 5,
-          ativo: dep.aprovado
-        }))
-
-      case 'ADD_DEPOIMENTO':
-        const { data: newDepData, error: newDepError } = await supabase
-          .from('depoimentos')
-          .insert([{
-            token: `token_${Date.now()}`,
-            nome: data.nome,
-            depoimento: data.texto,
-            avaliacao: data.estrelas,
-            aprovado: true
-          }])
-          .select()
-        
-        if (newDepError) throw newDepError
-        return newDepData
-
-      case 'GET_CONFIG':
-        const { data: configData, error: configError } = await supabase
-          .from('site_config')
-          .select('*')
-          .limit(1)
-          .single()
-        
-        if (configError && configError.code !== 'PGRST116') throw configError
-        
-        // Se não existe config, criar uma padrão
-        if (!configData) {
-          const defaultConfig = getConfigPadrao()
-          const { data: newConfigData, error: insertError } = await supabase
-            .from('site_config')
-            .insert([{
-              titulo: defaultConfig.nomeSite,
-              logo_url: null,
-              consulta_imagem_url: null,
-              nutricionista_imagem_url: null
-            }])
-            .select()
-            .single()
-          
-          if (insertError) throw insertError
-          return defaultConfig
-        }
-        
-        return {
-          ...getConfigPadrao(),
-          nomeSite: configData.titulo || getConfigPadrao().nomeSite
-        }
-
-      case 'UPDATE_CONFIG':
-        const { data: updatedConfig, error: updateError } = await supabase
-          .from('site_config')
-          .upsert([{
-            id: 1,
-            titulo: data.nomeSite,
-            logo_url: data.logoUrl || null,
-            consulta_imagem_url: data.consultaImagemUrl || null,
-            nutricionista_imagem_url: data.nutricionistaImagemUrl || null
-          }])
-          .select()
-        
-        if (updateError) throw updateError
-        return data
-
-      default:
-        throw new Error('Operação não suportada')
-    }
-  } catch (error) {
-    console.error('Erro no Supabase:', error)
-    throw error
-  }
-}
-
-// Fallback para localStorage
-function getFallbackData() {
-  if (typeof window === 'undefined') return null
-
-  try {
-    const leads = localStorage.getItem('nutri-leads')
-    const depoimentos = localStorage.getItem('nutri-depoimentos')
-    const config = localStorage.getItem('nutri-config')
-
-    return {
-      leads: leads ? JSON.parse(leads) : [],
-      depoimentos: depoimentos ? JSON.parse(depoimentos) : getDepoimentosPadrao(),
-      config: config ? JSON.parse(config) : getConfigPadrao(),
-      lastUpdate: new Date().toISOString()
-    }
-  } catch (error) {
-    console.error('Erro no fallback:', error)
-    return {
-      leads: [],
-      depoimentos: getDepoimentosPadrao(),
-      config: getConfigPadrao(),
-      lastUpdate: new Date().toISOString()
-    }
-  }
 }
 
 function getConfigPadrao(): ConfigSite {
@@ -294,65 +99,87 @@ function getDepoimentosPadrao(): Depoimento[] {
   ]
 }
 
-// Inicializar cache com Supabase
+// Fallback para localStorage (apenas para leitura inicial)
+function getFallbackData() {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const leads = localStorage.getItem('nutri-leads')
+    const depoimentos = localStorage.getItem('nutri-depoimentos')
+    const config = localStorage.getItem('nutri-config')
+
+    return {
+      leads: leads ? JSON.parse(leads) : [],
+      depoimentos: depoimentos ? JSON.parse(depoimentos) : getDepoimentosPadrao(),
+      config: config ? JSON.parse(config) : getConfigPadrao(),
+      lastUpdate: new Date().toISOString()
+    }
+  } catch (error) {
+    console.error('Erro no fallback:', error)
+    return {
+      leads: [],
+      depoimentos: getDepoimentosPadrao(),
+      config: getConfigPadrao(),
+      lastUpdate: new Date().toISOString()
+    }
+  }
+}
+
+// Inicializar cache
 async function initializeCache() {
   if (cache.initialized) return
 
   try {
-    if (isSupabaseConfigured()) {
-      // Tentar carregar do Supabase
-      const [leadsData, depoimentosData, configData] = await Promise.all([
-        supabaseRequest('GET_LEADS').catch(() => []),
-        supabaseRequest('GET_DEPOIMENTOS').catch(() => getDepoimentosPadrao()),
-        supabaseRequest('GET_CONFIG').catch(() => getConfigPadrao())
-      ])
-
-      cache.leads = leadsData || []
-      cache.depoimentos = depoimentosData || getDepoimentosPadrao()
-      cache.config = configData || getConfigPadrao()
-      cache.lastUpdate = new Date().toISOString()
-      cache.initialized = true
-
-      // Salvar no localStorage como backup
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
-        localStorage.setItem('nutri-depoimentos', JSON.stringify(cache.depoimentos))
-        localStorage.setItem('nutri-config', JSON.stringify(cache.config))
-      }
-    } else {
-      // Usar dados do localStorage como fallback
-      const fallbackData = getFallbackData()
-      if (fallbackData) {
-        cache.leads = fallbackData.leads
-        cache.depoimentos = fallbackData.depoimentos
-        cache.config = fallbackData.config
-        cache.lastUpdate = fallbackData.lastUpdate
-      }
-      cache.initialized = true
-    }
-  } catch (error) {
-    console.error('Erro ao inicializar cache:', error)
-    // Usar dados do localStorage como fallback
+    // Carregar dados padrão primeiro
     const fallbackData = getFallbackData()
     if (fallbackData) {
       cache.leads = fallbackData.leads
       cache.depoimentos = fallbackData.depoimentos
       cache.config = fallbackData.config
       cache.lastUpdate = fallbackData.lastUpdate
+    } else {
+      cache.depoimentos = getDepoimentosPadrao()
+      cache.config = getConfigPadrao()
     }
+    
+    cache.initialized = true
+  } catch (error) {
+    console.error('Erro ao inicializar cache:', error)
+    cache.depoimentos = getDepoimentosPadrao()
+    cache.config = getConfigPadrao()
     cache.initialized = true
   }
 }
 
-// Funções públicas
+// ============================================================================
+// FUNÇÕES PÚBLICAS - LEADS
+// ============================================================================
+
 export async function carregarLeads(): Promise<Lead[]> {
-  await initializeCache()
-  return [...cache.leads]
+  try {
+    const response = await fetch('/api/leads', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    const result = await response.json()
+
+    if (result.success && result.data) {
+      cache.leads = result.data
+      return result.data
+    }
+
+    return []
+  } catch (error) {
+    console.error('Erro ao carregar leads:', error)
+    return []
+  }
 }
 
 export function carregarLeadsSync(): Lead[] {
   if (!cache.initialized) {
-    // Tentar carregar do localStorage para uso síncrono
     const fallbackData = getFallbackData()
     return fallbackData?.leads || []
   }
@@ -361,62 +188,76 @@ export function carregarLeadsSync(): Lead[] {
 
 export async function adicionarLead(lead: Omit<Lead, 'id' | 'data' | 'status'>): Promise<void> {
   try {
-    if (isSupabaseConfigured()) {
-      await supabaseRequest('ADD_LEAD', lead)
-      // Recarregar dados do Supabase
-      cache.leads = await supabaseRequest('GET_LEADS')
-    } else {
-      // Fallback: adicionar apenas no localStorage
+    const response = await fetch('/api/leads', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(lead)
+    })
+
+    const result = await response.json()
+
+    if (!result.success) {
+      throw new Error(result.error || 'Erro ao adicionar lead')
+    }
+
+    // Atualizar cache local
+    if (result.data) {
       const newLead: Lead = {
-        ...lead,
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-        data: new Date().toISOString(),
+        id: result.data.id?.toString() || Date.now().toString(),
+        nome: lead.nome,
+        email: lead.email,
+        telefone: lead.telefone,
+        objetivo: lead.objetivo,
+        detalhes: lead.detalhes,
+        data: result.data.created_at || new Date().toISOString(),
         status: 'novo'
       }
       cache.leads.unshift(newLead)
-    }
-
-    // Sempre salvar no localStorage como backup
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
     }
   } catch (error) {
     console.error('Erro ao adicionar lead:', error)
-    // Fallback: adicionar apenas no localStorage
-    if (typeof window !== 'undefined') {
-      const newLead: Lead = {
-        ...lead,
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-        data: new Date().toISOString(),
-        status: 'novo'
-      }
-      cache.leads.unshift(newLead)
-      localStorage.setItem('nutri-leads', JSON.stringify(cache.leads))
-    }
+    throw error
   }
 }
 
 export async function salvarLeads(leads: Lead[]): Promise<void> {
-  try {
-    cache.leads = leads
-    
-    // Sempre salvar no localStorage como backup
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('nutri-leads', JSON.stringify(leads))
-    }
-  } catch (error) {
-    console.error('Erro ao salvar leads:', error)
-    // Fallback: salvar apenas no localStorage
-    if (typeof window !== 'undefined') {
-      cache.leads = leads
-      localStorage.setItem('nutri-leads', JSON.stringify(leads))
-    }
+  cache.leads = leads
+  
+  // Salvar no localStorage como backup
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('nutri-leads', JSON.stringify(leads))
   }
 }
 
+// ============================================================================
+// FUNÇÕES PÚBLICAS - DEPOIMENTOS
+// ============================================================================
+
 export async function carregarDepoimentos(): Promise<Depoimento[]> {
   await initializeCache()
-  return [...cache.depoimentos]
+  
+  try {
+    const response = await fetch('/api/depoimentos', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    const result = await response.json()
+
+    if (result.success && result.data) {
+      cache.depoimentos = result.data
+      return result.data
+    }
+
+    return cache.depoimentos
+  } catch (error) {
+    console.error('Erro ao carregar depoimentos:', error)
+    return cache.depoimentos
+  }
 }
 
 export function carregarDepoimentosSync(): Depoimento[] {
@@ -428,26 +269,41 @@ export function carregarDepoimentosSync(): Depoimento[] {
 }
 
 export async function salvarDepoimentos(depoimentos: Depoimento[]): Promise<void> {
-  try {
-    cache.depoimentos = depoimentos
-    
-    // Sempre salvar no localStorage como backup
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('nutri-depoimentos', JSON.stringify(depoimentos))
-    }
-  } catch (error) {
-    console.error('Erro ao salvar depoimentos:', error)
-    // Fallback: salvar apenas no localStorage
-    if (typeof window !== 'undefined') {
-      cache.depoimentos = depoimentos
-      localStorage.setItem('nutri-depoimentos', JSON.stringify(depoimentos))
-    }
+  cache.depoimentos = depoimentos
+  
+  // Salvar no localStorage como backup
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('nutri-depoimentos', JSON.stringify(depoimentos))
   }
 }
 
+// ============================================================================
+// FUNÇÕES PÚBLICAS - CONFIGURAÇÃO
+// ============================================================================
+
 export async function carregarConfig(): Promise<ConfigSite> {
   await initializeCache()
-  return { ...cache.config! }
+  
+  try {
+    const response = await fetch('/api/config', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    const result = await response.json()
+
+    if (result.success && result.data) {
+      cache.config = result.data
+      return result.data
+    }
+
+    return cache.config || getConfigPadrao()
+  } catch (error) {
+    console.error('Erro ao carregar config:', error)
+    return cache.config || getConfigPadrao()
+  }
 }
 
 export function carregarConfigSync(): ConfigSite {
@@ -460,23 +316,29 @@ export function carregarConfigSync(): ConfigSite {
 
 export async function salvarConfig(config: ConfigSite): Promise<void> {
   try {
-    if (isSupabaseConfigured()) {
-      await supabaseRequest('UPDATE_CONFIG', config)
+    const response = await fetch('/api/config', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config)
+    })
+
+    const result = await response.json()
+
+    if (!result.success) {
+      throw new Error(result.error || 'Erro ao salvar configuração')
     }
-    
+
     cache.config = config
     
-    // Sempre salvar no localStorage como backup
+    // Salvar no localStorage como backup
     if (typeof window !== 'undefined') {
       localStorage.setItem('nutri-config', JSON.stringify(config))
     }
   } catch (error) {
     console.error('Erro ao salvar config:', error)
-    // Fallback: salvar apenas no localStorage
-    if (typeof window !== 'undefined') {
-      cache.config = config
-      localStorage.setItem('nutri-config', JSON.stringify(config))
-    }
+    throw error
   }
 }
 
