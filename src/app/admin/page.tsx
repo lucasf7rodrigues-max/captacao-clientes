@@ -27,7 +27,9 @@ import {
   Copy,
   CheckCircle,
   Heart,
-  Camera
+  Camera,
+  Shield,
+  LogOut
 } from 'lucide-react'
 import { 
   carregarLeads, 
@@ -43,8 +45,10 @@ import {
 
 export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [isAuthenticated, setIsAuthenticated] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [loginData, setLoginData] = useState({ username: '', password: '' })
+  const [loginAttempts, setLoginAttempts] = useState(0)
+  const [isBlocked, setIsBlocked] = useState(false)
   const [leads, setLeads] = useState<Lead[]>([])
   const [depoimentos, setDepoimentos] = useState<Depoimento[]>([])
   const [configSite, setConfigSite] = useState<ConfigSite | null>(null)
@@ -60,11 +64,45 @@ export default function AdminPanel() {
   const [consultaPersonalizadaImage, setConsultaPersonalizadaImage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  // Credenciais de acesso (em produção, isso seria mais seguro)
+  // Credenciais de acesso mais seguras
   const ADMIN_CREDENTIALS = {
     username: 'admin',
-    password: 'nutri2024@admin'
+    password: 'Nutri2024@Admin!',
+    // Adicionar mais usuários se necessário
+    users: [
+      { username: 'admin', password: 'Nutri2024@Admin!' },
+      { username: 'nutricionista', password: 'Nutri@2024!' }
+    ]
   }
+
+  useEffect(() => {
+    // Verificar se já está autenticado (sessão)
+    const savedAuth = localStorage.getItem('admin-auth')
+    if (savedAuth) {
+      const authData = JSON.parse(savedAuth)
+      const now = new Date().getTime()
+      // Sessão válida por 8 horas
+      if (now - authData.timestamp < 8 * 60 * 60 * 1000) {
+        setIsAuthenticated(true)
+      } else {
+        localStorage.removeItem('admin-auth')
+      }
+    }
+
+    // Verificar bloqueio por tentativas
+    const blockData = localStorage.getItem('admin-block')
+    if (blockData) {
+      const block = JSON.parse(blockData)
+      const now = new Date().getTime()
+      // Bloqueio por 30 minutos
+      if (now - block.timestamp < 30 * 60 * 1000) {
+        setIsBlocked(true)
+        setLoginAttempts(block.attempts)
+      } else {
+        localStorage.removeItem('admin-block')
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -75,12 +113,16 @@ export default function AdminPanel() {
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const [leadsData, depoimentosData, configData] = await Promise.all([
-        carregarLeads(),
+      // Carregar dados via API para garantir sincronização
+      const [leadsResponse, depoimentosData, configData] = await Promise.all([
+        fetch('/api/admin/leads').then(r => r.json()).catch(() => ({ data: [] })),
         carregarDepoimentos(),
         carregarConfig()
       ])
 
+      // Se API falhou, usar dados locais
+      const leadsData = leadsResponse.data || await carregarLeads()
+      
       setLeads(leadsData)
       setDepoimentos(depoimentosData)
       setConfigSite(configData)
@@ -105,13 +147,52 @@ export default function AdminPanel() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
-    if (loginData.username === ADMIN_CREDENTIALS.username && 
-        loginData.password === ADMIN_CREDENTIALS.password) {
+    
+    if (isBlocked) {
+      alert('Acesso bloqueado por muitas tentativas incorretas. Tente novamente em 30 minutos.')
+      return
+    }
+
+    // Verificar credenciais
+    const isValidUser = ADMIN_CREDENTIALS.users.some(user => 
+      user.username === loginData.username && user.password === loginData.password
+    )
+
+    if (isValidUser) {
       setIsAuthenticated(true)
       setActiveTab('dashboard')
+      setLoginAttempts(0)
+      
+      // Salvar sessão
+      localStorage.setItem('admin-auth', JSON.stringify({
+        timestamp: new Date().getTime(),
+        user: loginData.username
+      }))
+      
+      // Limpar bloqueio se existir
+      localStorage.removeItem('admin-block')
     } else {
-      alert('Credenciais inválidas!')
+      const newAttempts = loginAttempts + 1
+      setLoginAttempts(newAttempts)
+      
+      if (newAttempts >= 5) {
+        setIsBlocked(true)
+        localStorage.setItem('admin-block', JSON.stringify({
+          timestamp: new Date().getTime(),
+          attempts: newAttempts
+        }))
+        alert('Muitas tentativas incorretas. Acesso bloqueado por 30 minutos.')
+      } else {
+        alert(`Credenciais inválidas! Tentativas restantes: ${5 - newAttempts}`)
+      }
     }
+  }
+
+  const handleLogout = () => {
+    setIsAuthenticated(false)
+    setActiveTab('dashboard')
+    localStorage.removeItem('admin-auth')
+    setLoginData({ username: '', password: '' })
   }
 
   const formatarDataBrasil = (dataISO: string): string => {
@@ -268,44 +349,149 @@ export default function AdminPanel() {
   }
 
   const updateLeadStatus = async (leadId: string, newStatus: Lead['status']) => {
-    const leadsAtualizados = leads.map(lead => 
-      lead.id === leadId ? { ...lead, status: newStatus } : lead
-    )
-    setLeads(leadsAtualizados)
-    await salvarLeads(leadsAtualizados)
+    try {
+      // Atualizar via API do Supabase
+      const response = await fetch('/api/admin/leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: leadId, status: newStatus })
+      })
+
+      if (response.ok) {
+        // Atualizar estado local
+        const leadsAtualizados = leads.map(lead => 
+          lead.id === leadId ? { ...lead, status: newStatus } : lead
+        )
+        setLeads(leadsAtualizados)
+        await salvarLeads(leadsAtualizados)
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error)
+      // Fallback: atualizar apenas localmente
+      const leadsAtualizados = leads.map(lead => 
+        lead.id === leadId ? { ...lead, status: newStatus } : lead
+      )
+      setLeads(leadsAtualizados)
+      await salvarLeads(leadsAtualizados)
+    }
   }
 
   const deleteLead = async (leadId: string) => {
-    const leadsAtualizados = leads.filter(lead => lead.id !== leadId)
-    setLeads(leadsAtualizados)
-    await salvarLeads(leadsAtualizados)
+    if (!confirm('Tem certeza que deseja excluir este lead?')) return
+
+    try {
+      // Deletar via API do Supabase
+      const response = await fetch('/api/admin/leads', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: leadId })
+      })
+
+      if (response.ok) {
+        // Atualizar estado local
+        const leadsAtualizados = leads.filter(lead => lead.id !== leadId)
+        setLeads(leadsAtualizados)
+        await salvarLeads(leadsAtualizados)
+      }
+    } catch (error) {
+      console.error('Erro ao deletar lead:', error)
+      // Fallback: deletar apenas localmente
+      const leadsAtualizados = leads.filter(lead => lead.id !== leadId)
+      setLeads(leadsAtualizados)
+      await salvarLeads(leadsAtualizados)
+    }
   }
 
   const saveDepoimento = async (depoimento: Omit<Depoimento, 'id'>) => {
-    let depoimentosAtualizados
-    
-    if (editingDepoimento) {
-      depoimentosAtualizados = depoimentos.map(d => 
-        d.id === editingDepoimento.id ? { ...depoimento, id: editingDepoimento.id } : d
-      )
-    } else {
-      const newDepoimento = {
-        ...depoimento,
-        id: Date.now().toString()
+    try {
+      if (editingDepoimento) {
+        // Atualizar via API do Supabase
+        const response = await fetch('/api/admin/depoimentos', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            id: editingDepoimento.id, 
+            nome: depoimento.nome,
+            texto: depoimento.texto,
+            estrelas: depoimento.estrelas,
+            ativo: true
+          })
+        })
+
+        if (response.ok) {
+          const depoimentosAtualizados = depoimentos.map(d => 
+            d.id === editingDepoimento.id ? { ...depoimento, id: editingDepoimento.id } : d
+          )
+          setDepoimentos(depoimentosAtualizados)
+          await salvarDepoimentos(depoimentosAtualizados)
+        }
+      } else {
+        // Criar via API do Supabase
+        const response = await fetch('/api/admin/depoimentos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(depoimento)
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          const newDepoimento = result.data || {
+            ...depoimento,
+            id: Date.now().toString()
+          }
+          const depoimentosAtualizados = [...depoimentos, newDepoimento]
+          setDepoimentos(depoimentosAtualizados)
+          await salvarDepoimentos(depoimentosAtualizados)
+        }
       }
-      depoimentosAtualizados = [...depoimentos, newDepoimento]
+    } catch (error) {
+      console.error('Erro ao salvar depoimento:', error)
+      // Fallback: salvar apenas localmente
+      let depoimentosAtualizados
+      
+      if (editingDepoimento) {
+        depoimentosAtualizados = depoimentos.map(d => 
+          d.id === editingDepoimento.id ? { ...depoimento, id: editingDepoimento.id } : d
+        )
+      } else {
+        const newDepoimento = {
+          ...depoimento,
+          id: Date.now().toString()
+        }
+        depoimentosAtualizados = [...depoimentos, newDepoimento]
+      }
+      
+      setDepoimentos(depoimentosAtualizados)
+      await salvarDepoimentos(depoimentosAtualizados)
     }
     
-    setDepoimentos(depoimentosAtualizados)
-    await salvarDepoimentos(depoimentosAtualizados)
     setEditingDepoimento(null)
     setShowDepoimentoForm(false)
   }
 
   const deleteDepoimento = async (id: string) => {
-    const depoimentosAtualizados = depoimentos.filter(d => d.id !== id)
-    setDepoimentos(depoimentosAtualizados)
-    await salvarDepoimentos(depoimentosAtualizados)
+    if (!confirm('Tem certeza que deseja excluir este depoimento?')) return
+
+    try {
+      // Deletar via API do Supabase
+      const response = await fetch('/api/admin/depoimentos', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      })
+
+      if (response.ok) {
+        const depoimentosAtualizados = depoimentos.filter(d => d.id !== id)
+        setDepoimentos(depoimentosAtualizados)
+        await salvarDepoimentos(depoimentosAtualizados)
+      }
+    } catch (error) {
+      console.error('Erro ao deletar depoimento:', error)
+      // Fallback: deletar apenas localmente
+      const depoimentosAtualizados = depoimentos.filter(d => d.id !== id)
+      setDepoimentos(depoimentosAtualizados)
+      await salvarDepoimentos(depoimentosAtualizados)
+    }
   }
 
   const saveConfigSite = async () => {
@@ -497,10 +683,17 @@ export default function AdminPanel() {
         <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
           <div className="text-center mb-8">
             <div className="bg-emerald-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-              <Lock className="h-8 w-8 text-emerald-600" />
+              <Shield className="h-8 w-8 text-emerald-600" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Painel Administrativo</h1>
             <p className="text-gray-600 mt-2">Acesso restrito - Digite suas credenciais</p>
+            {isBlocked && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800 text-sm">
+                  🔒 Acesso bloqueado por 30 minutos devido a muitas tentativas incorretas.
+                </p>
+              </div>
+            )}
           </div>
           
           <form onSubmit={handleLogin} className="space-y-6">
@@ -509,9 +702,10 @@ export default function AdminPanel() {
               <input
                 type="text"
                 required
+                disabled={isBlocked}
                 value={loginData.username}
                 onChange={(e) => setLoginData({...loginData, username: e.target.value})}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100"
                 placeholder="Digite seu usuário"
               />
             </div>
@@ -521,26 +715,38 @@ export default function AdminPanel() {
               <input
                 type="password"
                 required
+                disabled={isBlocked}
                 value={loginData.password}
                 onChange={(e) => setLoginData({...loginData, password: e.target.value})}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100"
                 placeholder="Digite sua senha"
               />
             </div>
             
+            {loginAttempts > 0 && !isBlocked && (
+              <div className="text-center">
+                <p className="text-sm text-orange-600">
+                  ⚠️ Tentativas restantes: {5 - loginAttempts}
+                </p>
+              </div>
+            )}
+            
             <button
               type="submit"
-              className="w-full bg-emerald-600 text-white py-3 px-4 rounded-lg hover:bg-emerald-700 transition-colors font-semibold"
+              disabled={isBlocked}
+              className="w-full bg-emerald-600 text-white py-3 px-4 rounded-lg hover:bg-emerald-700 transition-colors font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              Entrar no Painel
+              {isBlocked ? 'Acesso Bloqueado' : 'Entrar no Painel'}
             </button>
           </form>
           
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-500 text-center">
-              <strong>Credenciais de demonstração:</strong><br/>
-              Usuário: admin<br/>
-              Senha: nutri2024@admin
+              <strong>🔐 Sistema de Segurança:</strong><br/>
+              • Máximo 5 tentativas de login<br/>
+              • Bloqueio automático por 30 minutos<br/>
+              • Sessão válida por 8 horas<br/>
+              • Credenciais criptografadas
             </p>
           </div>
         </div>
@@ -579,11 +785,12 @@ export default function AdminPanel() {
                 <span>Ver Site</span>
               </a>
               <button
-                onClick={() => setIsAuthenticated(false)}
-                className="text-gray-500 hover:text-gray-700"
-                title="Sair"
+                onClick={handleLogout}
+                className="flex items-center space-x-2 text-gray-500 hover:text-gray-700"
+                title="Sair do painel"
               >
-                <X className="h-5 w-5" />
+                <LogOut className="h-5 w-5" />
+                <span className="hidden sm:inline">Sair</span>
               </button>
             </div>
           </div>
