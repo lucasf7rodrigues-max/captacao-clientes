@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { Star, Heart, Users, Award, Phone, Mail, MapPin, Clock, CheckCircle, ArrowRight, Menu, X, Camera } from 'lucide-react'
-import { adicionarLead, carregarConfigSync, carregarDepoimentosSync, type ConfigSite, type Depoimento } from '@/lib/data'
+import { Star, Heart, Users, Award, Phone, Mail, MapPin, Clock, CheckCircle, ArrowRight, Menu, X, Camera, ChevronLeft, ChevronRight } from 'lucide-react'
+import { adicionarLead, carregarConfigSync, type ConfigSite, type Depoimento } from '@/lib/data'
 
 export default function NutricionistaLanding() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [config, setConfig] = useState<ConfigSite | null>(null)
   const [depoimentos, setDepoimentos] = useState<Depoimento[]>([])
+  const [currentDepoimentoIndex, setCurrentDepoimentoIndex] = useState(0)
   const [showSuccessPopup, setShowSuccessPopup] = useState(false)
   const [nutricionistaImage, setNutricionistaImage] = useState<string | null>(null)
   const [consultaPersonalizadaImage, setConsultaPersonalizadaImage] = useState<string | null>(null)
@@ -21,9 +22,11 @@ export default function NutricionistaLanding() {
   })
 
   useEffect(() => {
-    // Carregar dados iniciais de forma síncrona para evitar loading
+    // Carregar configuração
     setConfig(carregarConfigSync())
-    setDepoimentos(carregarDepoimentosSync())
+    
+    // Carregar depoimentos aprovados da API
+    carregarDepoimentosAprovados()
     
     // Carregar imagem da nutricionista do localStorage
     const savedImage = localStorage.getItem('nutri-profile-image')
@@ -37,6 +40,43 @@ export default function NutricionistaLanding() {
       setConsultaPersonalizadaImage(savedConsultaImage)
     }
   }, [])
+
+  const carregarDepoimentosAprovados = async () => {
+    try {
+      const response = await fetch('/api/depoimentos')
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        // Converter formato da API para formato do componente e limitar a 10
+        const depoimentosFormatados = result.data.slice(0, 10).map((dep: any) => ({
+          id: dep.id.toString(),
+          nome: dep.nome,
+          iniciais: dep.nome.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
+          texto: dep.depoimento,
+          resultado: 'Cliente satisfeito',
+          estrelas: dep.avaliacao || 5,
+          ativo: dep.aprovado
+        }))
+        setDepoimentos(depoimentosFormatados)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar depoimentos:', error)
+      // Manter array vazio se houver erro
+      setDepoimentos([])
+    }
+  }
+
+  const nextDepoimento = () => {
+    setCurrentDepoimentoIndex((prev) => 
+      prev === depoimentos.length - 1 ? 0 : prev + 1
+    )
+  }
+
+  const prevDepoimento = () => {
+    setCurrentDepoimentoIndex((prev) => 
+      prev === 0 ? depoimentos.length - 1 : prev - 1
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -380,29 +420,86 @@ export default function NutricionistaLanding() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {depoimentos.map((depoimento) => (
-              <div key={depoimento.id} className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-8">
-                <div className="flex items-center mb-4">
-                  {[...Array(depoimento.estrelas)].map((_, i) => (
-                    <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
+          {depoimentos.length > 0 ? (
+            <div className="relative max-w-4xl mx-auto">
+              {/* Carrossel de Depoimentos */}
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-8 md:p-12 shadow-xl">
+                <div className="flex items-center mb-6">
+                  {[...Array(depoimentos[currentDepoimentoIndex]?.estrelas || 5)].map((_, i) => (
+                    <Star key={i} className="h-6 w-6 text-yellow-400 fill-current" />
                   ))}
                 </div>
-                <p className="text-gray-700 mb-6 italic">
-                  "{depoimento.texto}"
+                <p className="text-gray-700 text-lg md:text-xl mb-8 italic leading-relaxed">
+                  "{depoimentos[currentDepoimentoIndex]?.texto}"
                 </p>
-                <div className="flex items-center">
-                  <div className="bg-emerald-200 rounded-full w-12 h-12 flex items-center justify-center mr-4">
-                    <span className="text-emerald-800 font-bold">{depoimento.iniciais}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="bg-emerald-200 rounded-full w-14 h-14 flex items-center justify-center mr-4">
+                      <span className="text-emerald-800 font-bold text-lg">
+                        {depoimentos[currentDepoimentoIndex]?.iniciais}
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-900 text-lg">
+                        {depoimentos[currentDepoimentoIndex]?.nome}
+                      </h4>
+                      <p className="text-gray-600">
+                        {depoimentos[currentDepoimentoIndex]?.resultado}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-gray-900">{depoimento.nome}</h4>
-                    <p className="text-gray-600 text-sm">{depoimento.resultado}</p>
+                  
+                  {/* Contador de depoimentos */}
+                  <div className="text-gray-500 text-sm">
+                    {currentDepoimentoIndex + 1} / {depoimentos.length}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+
+              {/* Botões de navegação */}
+              {depoimentos.length > 1 && (
+                <>
+                  <button
+                    onClick={prevDepoimento}
+                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 bg-white rounded-full p-3 shadow-lg hover:bg-emerald-50 transition-colors"
+                    aria-label="Depoimento anterior"
+                  >
+                    <ChevronLeft className="h-6 w-6 text-emerald-600" />
+                  </button>
+                  <button
+                    onClick={nextDepoimento}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 bg-white rounded-full p-3 shadow-lg hover:bg-emerald-50 transition-colors"
+                    aria-label="Próximo depoimento"
+                  >
+                    <ChevronRight className="h-6 w-6 text-emerald-600" />
+                  </button>
+                </>
+              )}
+
+              {/* Indicadores de posição */}
+              {depoimentos.length > 1 && (
+                <div className="flex justify-center mt-6 space-x-2">
+                  {depoimentos.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setCurrentDepoimentoIndex(index)}
+                      className={`h-2 rounded-full transition-all ${
+                        index === currentDepoimentoIndex 
+                          ? 'w-8 bg-emerald-600' 
+                          : 'w-2 bg-gray-300 hover:bg-emerald-300'
+                      }`}
+                      aria-label={`Ir para depoimento ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center text-gray-500 py-12">
+              <p className="text-lg">Nenhum depoimento disponível no momento.</p>
+              <p className="text-sm mt-2">Novos depoimentos serão exibidos após aprovação.</p>
+            </div>
+          )}
         </div>
       </section>
 

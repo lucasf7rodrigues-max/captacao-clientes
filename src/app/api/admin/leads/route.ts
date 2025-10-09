@@ -28,7 +28,7 @@ export async function GET() {
                lead.mensagem.includes('massa') ? 'ganho-massa' : 'reeducacao',
       detalhes: lead.mensagem,
       data: lead.created_at,
-      status: 'novo' // Por enquanto todos são novos, depois podemos adicionar campo status
+      status: lead.status || 'novo' // Usar status do banco ou 'novo' como padrão
     }))
 
     return NextResponse.json({ 
@@ -57,6 +57,13 @@ export async function PATCH(request: NextRequest) {
       }, { status: 400 })
     }
 
+    if (!status) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Status é obrigatório' 
+      }, { status: 400 })
+    }
+
     if (!isSupabaseConfigured() || !supabase) {
       return NextResponse.json({ 
         success: true, 
@@ -64,18 +71,30 @@ export async function PATCH(request: NextRequest) {
       })
     }
 
-    // Por enquanto, vamos apenas simular a atualização
-    // Em uma implementação completa, adicionaríamos campo status na tabela leads
+    // Atualizar o status no Supabase
+    const { data, error } = await supabase
+      .from('leads')
+      .update({ status: status })
+      .eq('id', parseInt(id))
+      .select()
+
+    if (error) {
+      console.error('Erro ao atualizar status no Supabase:', error)
+      throw error
+    }
+
     return NextResponse.json({ 
       success: true, 
-      message: 'Status do lead atualizado com sucesso!'
+      message: 'Status do lead atualizado com sucesso!',
+      data: data?.[0]
     })
   } catch (error) {
     console.error('Erro ao atualizar lead:', error)
     return NextResponse.json({ 
-      success: true, 
-      message: 'Lead atualizado com sucesso!'
-    })
+      success: false, 
+      error: 'Erro ao atualizar lead',
+      message: error instanceof Error ? error.message : 'Erro desconhecido'
+    }, { status: 500 })
   }
 }
 
