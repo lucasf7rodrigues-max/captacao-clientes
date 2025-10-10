@@ -71,7 +71,7 @@ export default function AdminPanel() {
     // Adicionar mais usuários se necessário
     users: [
       { username: 'admin', password: 'Nutri2024@Admin!' },
-      { username: 'nutricionista', password: 'Nutri@2024!' }
+      { username: 'fabiane', password: 'Fabi@2410!' }
     ]
   }
 

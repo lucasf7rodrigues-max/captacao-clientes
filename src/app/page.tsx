@@ -635,7 +635,7 @@ export default function NutricionistaLanding() {
                   <div>
                     <h4 className="font-semibold text-emerald-100">Localização</h4>
                     <p className="text-lg">{config.endereco}</p>
-                    <p className="text-emerald-200 text-sm">Atendimento presencial e online</p>
+                    <p className="text-emerald-200 text-sm">Atendimento online</p>
                   </div>
                 </div>
                 
@@ -680,7 +680,7 @@ export default function NutricionistaLanding() {
               Transformando vidas através da nutrição personalizada
             </p>
             <p className="text-gray-500 text-sm">
-              © 2024 {config.nomeSite}. Todos os direitos reservados. | CRN: {config.crn}
+              © 2025 {config.nomeSite}. Todos os direitos reservados. | CRN: {config.crn}
             </p>
           </div>
         </div>
