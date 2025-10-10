@@ -1080,7 +1080,7 @@ export default function AdminPanel() {
                                 <div className="text-sm text-gray-900">{lead.objetivo}</div>
                               </td>
                               <td className="px-6 py-4">
-                                <div className="text-sm text-gray-900 max-w-xs truncate" title={lead.detalhes}>
+                                <div className="text-sm text-gray-900 max-w-md whitespace-pre-wrap break-words">
                                   {lead.detalhes || '-'}
                                 </div>
                               </td>

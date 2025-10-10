@@ -28,18 +28,51 @@ export default function NutricionistaLanding() {
     // Carregar depoimentos aprovados da API
     carregarDepoimentosAprovados()
     
-    // Carregar imagem da nutricionista do localStorage
-    const savedImage = localStorage.getItem('nutri-profile-image')
-    if (savedImage) {
-      setNutricionistaImage(savedImage)
-    }
-
-    // Carregar imagem da consulta personalizada do localStorage
-    const savedConsultaImage = localStorage.getItem('consulta-personalizada-image')
-    if (savedConsultaImage) {
-      setConsultaPersonalizadaImage(savedConsultaImage)
-    }
+    // Carregar imagens da API de configuração
+    carregarImagensConfig()
   }, [])
+
+  const carregarImagensConfig = async () => {
+    try {
+      const response = await fetch('/api/config')
+      const result = await response.json()
+      
+      if (result.config) {
+        // Carregar imagem da nutricionista
+        if (result.config.nutricionista_imagem_url) {
+          setNutricionistaImage(result.config.nutricionista_imagem_url)
+        } else {
+          // Fallback: tentar carregar do localStorage
+          const savedImage = localStorage.getItem('nutri-profile-image')
+          if (savedImage) {
+            setNutricionistaImage(savedImage)
+          }
+        }
+
+        // Carregar imagem da consulta personalizada
+        if (result.config.consulta_imagem_url) {
+          setConsultaPersonalizadaImage(result.config.consulta_imagem_url)
+        } else {
+          // Fallback: tentar carregar do localStorage
+          const savedConsultaImage = localStorage.getItem('consulta-personalizada-image')
+          if (savedConsultaImage) {
+            setConsultaPersonalizadaImage(savedConsultaImage)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar imagens:', error)
+      // Fallback para localStorage em caso de erro
+      const savedImage = localStorage.getItem('nutri-profile-image')
+      if (savedImage) {
+        setNutricionistaImage(savedImage)
+      }
+      const savedConsultaImage = localStorage.getItem('consulta-personalizada-image')
+      if (savedConsultaImage) {
+        setConsultaPersonalizadaImage(savedConsultaImage)
+      }
+    }
+  }
 
   const carregarDepoimentosAprovados = async () => {
     try {
@@ -50,9 +83,9 @@ export default function NutricionistaLanding() {
         // Converter formato da API para formato do componente e limitar a 10
         const depoimentosFormatados = result.data.slice(0, 10).map((dep: any) => ({
           id: dep.id.toString(),
-          nome: dep.nome,
-          iniciais: dep.nome.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase(),
-          texto: dep.depoimento,
+          nome: dep.nome || 'Anônimo',
+          iniciais: dep.nome ? dep.nome.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'AN',
+          texto: dep.depoimento || '',
           resultado: 'Cliente satisfeito',
           estrelas: dep.avaliacao || 5,
           ativo: dep.aprovado
@@ -199,13 +232,13 @@ export default function NutricionistaLanding() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 leading-tight">
-                {config.heroTitulo.split(' ').map((word, index) => (
+                {config?.heroTitulo ? config.heroTitulo.split(' ').map((word, index) => (
                   <span key={index} className={
                     word.includes('saúde') || word.includes('nutrição') ? 'text-emerald-600' : ''
                   }>
                     {word}{' '}
                   </span>
-                ))}
+                )) : 'Transforme sua saúde com nutrição personalizada'}
               </h1>
               <p className="text-xl text-gray-600 mt-6 leading-relaxed">
                 {config.heroSubtitulo}
